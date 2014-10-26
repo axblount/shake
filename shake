@@ -1,0 +1,91 @@
+#!/bin/bash
+#
+# SHAKE
+# shell scripts as makefiles
+#
+# shake relies on these global variables
+#   shake_main      a function defined in the target Makefile
+#   shake_task      the current running task
+#   shake_target    'true' if the current task is the one supplied to shake
+#
+# tested using dash, bash, and posh
+
+main() {
+    # make sure there isn't a global shake_main
+    # if is_function shake_main; then
+    #     echo [error] \'shake_main\' is already defined.
+    # fi
+
+    # Source the Shakefile to get `shake_main`
+    if [ -f ./Shakefile ]; then
+        . ./Shakefile
+    else
+        echo [error] Couldn\'t find Shakefile.
+        exit 1
+    fi
+
+    shake_target=true
+    shake_main $@
+    check_status $? "shake_main $@"
+}
+
+# used to run a task's dependencies
+# accepts task names as arguments
+depends_on() {
+    # first we need to run the dependencies
+    # then we check to see if any of the files we depend on are newer
+    # if none are newer, we can safely exit from this task.
+    for dep in $@; do
+        # only the task given to the shake command is the target
+        (shake_target=
+         shake_main "$dep";
+         check_status $? "shake_main $dep")
+    done
+
+    # Check to see if we can skip this task
+    # *  always run the target task
+    # *  we can only skip a task if it generates
+    #    a file and that file already exists
+    # *  if the task's file is newer than its
+    #    dependencies, we're done
+    if [ "$shake_target" != true ] \
+    && [ -f "$shake_task" ] \
+    && is_newest "$shake_task" $@; then
+        exit 0
+    fi
+}
+
+# check that a command's exit status
+# if it isn't 0, display an error message
+# and exit with that status.
+check_status() {
+    # $1 - status code
+    # $2 - the command
+    if [ "$1" != 0 ]; then
+        echo [error] [$shake_task] \"$2\" failed. \(exit code $1\)
+        exit "$1"
+    fi
+}
+
+# echo the command to be run
+# eval it
+# and make sure it didn't screw up
+run() {
+    echo [$shake_task] $@
+    eval $@
+    check_status $? "$@"
+}
+
+# given a list of file names, print the newest one
+# ignore non-existent or unreadable files
+newest() {
+    ls -t1 $@ 2> /dev/null | head -n 1
+}
+
+# check if the first file listed is newer than the rest
+# note: anything is 'newer' than a file that doesn't exist
+is_newest() {
+    [ "$1" = "$(newest $@)" ]
+}
+
+main $@

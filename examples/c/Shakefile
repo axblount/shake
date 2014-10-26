@@ -1,0 +1,31 @@
+#!/bin/sh
+
+CC=c99
+OBJECTS='main.o hello.o'
+BIN=hello
+
+shake_main() {
+    shake_task=${1:-build}; shift
+
+    case "$shake_task" in
+        build)
+            depends_on $OBJECTS
+            run $CC -o $BIN $OBJECTS
+            ;;
+        *.o)
+            src=${shake_task%.o}.c
+            depends_on "$src"
+            run $CC -c -o "$shake_task" "$src"
+            ;;
+        clean)
+            run rm -f *.o $BIN
+            ;;
+        rebuild)
+            depends_on clean build
+            ;;
+        run)
+            depends_on build
+            run ./$BIN
+            ;;
+    esac
+}

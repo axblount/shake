@@ -85,6 +85,11 @@ check_status() {
 # and make sure it didn't screw up
 run() {
     echo [$shake_task] $@
+    runq $@
+}
+
+# Run a command silently
+runq() {
     eval $@
     check_status $? "$@"
 }

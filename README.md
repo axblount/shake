@@ -14,25 +14,23 @@ When invoked, Shake sources the Shakefile in the current directory. Any argument
 
 *   `depends_on [tasks...]` - Tasks supplied to depends_on will be run in the order given. If any of the dependencies fail the build will terminate. As an example the task `rebuild` might declare `depends_on clean build`.
 *   `run [cmd]` - When running shell commands as part of a task, it's best to use this function. `run` will echo the command before evaluating it. If the command fails, `run` will display an error message and terminate the build.
+*   `runq [cmd]` Like run, but silent.
 
 Most Shakefiles will use the following template
 ```sh
 #!/bin/sh
 
-# Build Parameters
-DEFAULT=build
+# Build parameters
+CC=gcc
+# etc...
 
-shake_main() {
-    shake_task=${1:-$DEFAULT}
-    case "$shake_task" in
-        # Task Defintions
-    esac
-}
-
+case "$task" in
+    # Task Defintions
+esac
 ```
 
-More Complete Example
----------------------
+Example
+-------
 
 Lets look at the sample project in `examples/c`. The project consists of
 *   `hello.h`
@@ -47,45 +45,41 @@ The shebang isn't necessary, but may help your editor identify the file as a she
 ```
 First we define the parameters of our build.
 ```sh
-CC=c99
+CC=cc
 OBJECTS='main.o hello.o'
 BIN=hello
 ```
-Our Shakefile is required to implement a `shake_main` function.
+The name of the current task is in the variable `task`. The default is `'all'`.
+The `depends_on` function is used to declare that the current task depends on others.
+`run` is a utility function provided to make debugging easier. It will echo the command before running it and will notify the user should the command fail.
 ```sh
-shake_main() {
-```
-Inside of `shake_main`, we are required to set the `$shake_task` based on the parameters.
-```sh
-    shake_task=${1:-build}
-```
-The `depends_on` function is used to declare that the current task depends on others. `run` is a utility function provided to make debugging easier. It will echo the command before running it and will notify the use should the command fail.
-```sh
-    case "$shake_task" in
-        build)
-            depends_on $OBJECTS
-            run $CC -o $BIN $OBJECTS
-            ;;
+case "$task" in
+all)
+    depends_on build
+    ;;
+build)
+    depends_on $OBJECTS
+    run $CC -o $BIN $OBJECTS
+    ;;
 ```
 Files are handled using splats in the case statement. If the task is a filename and that file exists, its last modified date will be compared against the files it depends on. The task will only be run if one of its dependencies is newer than the product.
 ```sh
-        *.o)
-            src=${shake_task%.o}.c
-            depends_on "$src"
-            run $CC -c -o "$shake_task" "$src"
-            ;;
-        clean)
-            run rm -f *.o $BIN
-            ;;
-        rebuild)
-            depends_on clean build
-            ;;
-        run)
-            depends_on build
-            run ./$BIN
-            ;;
-    esac
-}
+*.o)
+    src=${task%.o}.c
+    depends_on "$src"
+    run $CC -c -o "$task" "$src"
+    ;;
+clean)
+    run rm -f *.o $BIN
+    ;;
+rebuild)
+    depends_on clean build
+    ;;
+run)
+    depends_on build
+    run ./$BIN
+    ;;
+esac
 ```
 
 ### Usage

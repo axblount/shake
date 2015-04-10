@@ -21,62 +21,65 @@
 # -SHAKE-
 #
 # shell scripts as makefiles
-#
-# shake relies on these global variables
-#   shake_main      a function defined in the target Makefile
-#   shake_task      the current running task
-#   shake_target    'true' if the current task is the one supplied to shake
-#
 # tested using dash, bash, and posh
+#
+# shake relies on these 'global' variables
+#   task                the current task, this is passed to the Shakefile
+#   __is_shake_target   'true' if the current task was supplied to shake as a argument
+#
+# shake provides these functions to Shakefiles:
+#   run                 Print a command, run it, and check it's return status.
+#   runq                Same as run, but quiet.
+#   depends_on          Runs the listed tasks as dependencies.
 
-main() {
-    # Source the Shakefile to get `shake_main`
-    if [ -f ./Shakefile ]; then
-        . ./Shakefile
-    else
-        echo [error] Couldn\'t find Shakefile.
+__main() {
+    # $@ - A list of tasks to run.
+
+    # Make sure there's a readable Shakefile
+    if [ ! -r ./Shakefile ]; then
+        __check_status 1 "Couldn't find or read Shakefile."
         exit 1
     fi
 
-    shake_target=true
-    shake_main $@
-    check_status $? "shake_main $@"
+    args=$@
+    if [ $# -eq 0 ]; then
+        # No arguments were given to shake.
+        # Run the default, 'all'.
+        args="all"
+    fi
+
+    # Run each target separately.
+    for target in $args; do
+        __is_shake_target=true
+        task=$target
+        . ./Shakefile
+        __check_status $? "$target"
+    done
 }
 
 # used to run a task's dependencies
 # accepts task names as arguments
 depends_on() {
+    # $@ - A list of tasks to be run/checked as dependencies
+
     # first we need to run the dependencies
-    # then we check to see if any of the files we depend on are newer
-    # if none are newer, we can safely exit from this task.
     for dep in $@; do
         # only the task given to the shake command is the target
-        (shake_target=
-         shake_main "$dep";
-         check_status $? "shake_main $dep")
+        (__is_shake_target=
+         task=$dep
+         . ./Shakefile
+         __check_status $? "$dep")
     done
 
-    # Check to see if we can skip this task
-    # *  always run the target task
-    # *  we can only skip a task if it generates
-    #    a file and that file already exists
-    # *  if the task's file is newer than its
-    #    dependencies, we're done
-    if [ "$shake_target" != true -a -f "$shake_task" ] \
-    && is_newest "$shake_task" $@; then
+    # Check to see if we can skip this task.
+    # We can only skip a task if:
+    #    - it is NOT the target
+    #    - it generates a file
+    #    - that file already exists
+    #    - that file is newer than all its dependencies
+    if [ "$__is_shake_target" != 'true' -a -f "$task" ] \
+            && __is_newest "$task" $@; then
         exit 0
-    fi
-}
-
-# check that a command's exit status
-# if it isn't 0, display an error message
-# and exit with that status.
-check_status() {
-    # $1 - status code
-    # $2 - the command
-    if [ "$1" != 0 ]; then
-        echo [error] [$shake_task] \"$2\" failed. \(exit code $1\)
-        exit "$1"
     fi
 }
 
@@ -84,26 +87,44 @@ check_status() {
 # eval it
 # and make sure it didn't screw up
 run() {
-    echo [$shake_task] $@
+    # $@ - a complete command
+    echo [$task] $@
     runq $@
 }
 
 # Run a command silently
+# fail it it fails
 runq() {
+    # $@ - A complete command
     eval $@
-    check_status $? "$@"
+    __check_status $? "$@"
+}
+
+# check that a command's exit status
+# if it isn't 0, display an error message
+# and exit with that status.
+__check_status() {
+    # $1 - status code
+    # $2 - the command
+    if [ "$1" != 0 ]; then
+        echo '/!\ ERROR /!\' [$task] \"$2\" failed. \(exit code $1\)
+        exit "$1"
+    fi
 }
 
 # given a list of file names, print the newest one
 # ignore non-existent or unreadable files
-newest() {
+__newest() {
+    # $@ - A list of files
     ls -t1 $@ 2> /dev/null | head -n 1
 }
 
 # check if the first file listed is newer than the rest
 # note: anything is 'newer' than a file that doesn't exist
-is_newest() {
-    [ "$1" = "$(newest $@)" ]
+__is_newest() {
+    # $@ - A list of files
+    # $1 - The file to check
+    [ "$1" = "$(__newest $@)" ]
 }
 
-main $@
+__main $@

@@ -32,6 +32,9 @@
 #   runq                Same as run, but quiet.
 #   depends_on          Runs the listed tasks as dependencies.
 
+set -o errexit
+set -o nounset
+
 __main() {
     # $@ - A list of tasks to run.
 
